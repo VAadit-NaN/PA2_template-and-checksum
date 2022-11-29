@@ -5,10 +5,14 @@ import sys
 import socket
 import datetime
 from checksum import checksum, checksum_verifier
+import re
 
 CONNECTION_TIMEOUT = 60 # timeout when the sender cannot find the receiver within 60 seconds
 FIRST_NAME = "FIRSTNAME"
 LAST_NAME = "LASTNAME"
+PACKETPATTERN_IN = r"([0-9]*)\s.{22}\s+([0-9]{5})"
+
+p_in_regex = re.compile(PACKETPATTERN_IN)
 
 def start_sender(server_ip, server_port, connection_ID, loss_rate=0, corrupt_rate=0, max_delay=0, transmission_timeout=60, filename="declaration.txt"):
     """
@@ -55,33 +59,76 @@ def start_sender(server_ip, server_port, connection_ID, loss_rate=0, corrupt_rat
     
         # HELLO S <loss_rate> <corrupt_rate> <max_delay> <ID>
         # read page 5-6 for debugging (connection_ID in use etc.)
-        hello_msg = "HELLO S {} {} {} {}".format(loss_rate, corrupt_rate, max_delay, connection_ID)
+        hello_msg = f"HELLO S {loss_rate} {corrupt_rate} {max_delay} {connection_ID}"
         print(hello_msg)
 
-        # NOTE: <loss_rate> <corrupt_rate> are float values in the range [0.0, 1.0]
-        clientSock.sendall(bytes(hello_msg, "UTF-8"))
+        # TEMPORARY: no need for manual handshake...this is localhost
+            # NOTE: <loss_rate> <corrupt_rate> are float values in the range [0.0, 1.0]
+            # clientSock.sendall(bytes(hello_msg, "UTF-8"))
 
-        # 32 is arbitrary. May need to be bigger
-        data = clientSock.recv(32)
-        print(data.decode("UTF-8").strip())
-        datastring = data.decode("UTF-8").strip().split()
-
-        if (datastring[0] != "WAITING"):
-            #error case
-            pass
+            # # 32 is arbitrary. May need to be bigger
+            # data = clientSock.recv(32)
+            # print(data.decode("UTF-8").strip())
+            # datastring = data.decode("UTF-8").strip().split()
+            # if (datastring[0] != "WAITING"):
+            #     #error case
+            #     pass    
+            # # OK message: i want to see it
+            # data2 = clientSock.recv(64)
+            # print(data2.decode("UTF-8").strip())
         
+        # works up till here
+
+        # integer sequence number> <space> <integer ACK number> <space> 
+        # <20 bytes of characters – payload> <space> 
+        # <integer checksum represented as characters>
+        
+        chunk_size = 20
+        seq_bool = False
+        ack_bool = False
+        
+        # from: https://stackoverflow.com/a/61394102
+        with open('declaration.txt') as fh:
+            while (payload := fh.read(chunk_size)):
+
+                chk_in = f"{1 if seq_bool else 0} {1 if ack_bool else 0} {payload}"
+                chk_out = checksum(chk_in)
+                packet = f"{chk_in} {chk_out}"
+
+                # send with seq 0 and start the timer
+                clientSock.sendall(bytes(packet, "UTF-8"))
+
+                # recieve packet from the server
+                buf = clientSock.recv(30)
+                packetString = buf.decode("UTF-8")
+                print(f"Server SAYS: {packetString}")
+                match: re.match = re.match(p_in_regex, packetString)
+
+                # ack 0 is 00720 and ack 1 is 00721
+                # NOTE: implement timeouts after. rdt 2.2 for now
                 
-        # OK message: i want to see it
-        data2 = clientSock.recv(64)
-        print(data2.decode("UTF-8").strip())
+                if ack_bool:
+                    # wait for ACK 1 : stay in state if checksum != 00721 OR timeout
+                    # should be a while loop -> keep resending until ACK 1
+                    if (match[2] != "00721"):
+                        clientSock.sendall(bytes(packet, "UTF-8"))
+                        buf = clientSock.recv(30)
+                        packetString = buf.decode("UTF-8")
+                        print(f"RETRYING --- Server SAYS: {packetString}")
+                        match: re.match = re.match(p_in_regex, packetString)
+                else:
+                    # wait for ACK 0 : stay in state if checksum != 00720 OR timeout
+                    # should be a while loop -> keep resending until ACK 0
+                    if (match[2] != "00720"):
+                        clientSock.sendall(bytes(packet, "UTF-8"))
+                        buf = clientSock.recv(30)
+                        packetString = buf.decode("UTF-8")
+                        print(f"RETRYING --- Server SAYS: {packetString}")
+                        match: re.match = re.match(p_in_regex, packetString)
 
-        # start transmitting 200 bytes of declaration now?
-        
-
-
-
-
-
+                # else reset the timer and invert ack and seq
+                ack_bool = not ack_bool
+                seq_bool = not seq_bool
 
 
 
@@ -101,12 +148,16 @@ def start_sender(server_ip, server_port, connection_ID, loss_rate=0, corrupt_rat
  
 if __name__ == '__main__':
     # CHECK INPUT ARGUMENTS
-    if len(sys.argv) != 9:
-        print("Expected \"python3 PA2_sender.py <server_ip> <server_port> <connection_id> <loss_rate> <corrupt_rate> <max_delay> <transmission_timeout> <filename>\"")
-        exit()
+    # if len(sys.argv) != 9:
+    #     print("Expected \"python3 PA2_sender.py <server_ip> <server_port> <connection_id> <loss_rate> <corrupt_rate> <max_delay> <transmission_timeout> <filename>\"")
+    #     exit()
 
     # ASSIGN ARGUMENTS TO VARIABLES
-    server_ip, server_port, connection_ID, loss_rate, corrupt_rate, max_delay, transmission_timeout, filename = sys.argv[1:]
+    # server_ip, server_port, connection_ID, loss_rate, corrupt_rate, max_delay, transmission_timeout, filename = sys.argv[1:]
+
+    # TEMPORARY RESOLUTION FOR LOCALHOST
+    server_ip, server_port, connection_ID, loss_rate, corrupt_rate, max_delay, transmission_timeout, filename \
+    =  "127.0.0.1", 1025, 6464, 0.0, 0.0, 0.0, 60, "declaration.txt"
     
     # RUN SENDER
     start_sender(server_ip, int(server_port), connection_ID, loss_rate, corrupt_rate, max_delay, float(transmission_timeout), filename)
