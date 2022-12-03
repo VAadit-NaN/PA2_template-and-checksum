@@ -11,9 +11,9 @@ import re
 CONNECTION_TIMEOUT = 60 # timeout when the receiver cannot find the sender within 60 seconds
 FIRST_NAME = "AADITYA"
 LAST_NAME = "VIKRAM"
-PACKETPATTERN_OUT = r"([0-9]*)\s+([0-9]*)\s+(.{20})\s+([0-9]{5})"
+PACKETPATTERN= r"([0-9]*)\s+([0-9]*)\s+(.{20})\s+([0-9]{5})"
 
-p_out_regex = re.compile(PACKETPATTERN_OUT)
+p_regex = re.compile(PACKETPATTERN)
 def start_receiver(server_ip, server_port, connection_ID, loss_rate=0.0, corrupt_rate=0.0, max_delay=0.0):
     """
      This function runs the receiver, connnect to the server, and receiver file from the sender.
@@ -62,34 +62,45 @@ def start_receiver(server_ip, server_port, connection_ID, loss_rate=0.0, corrupt
         # dataSock.sendall(bytes("  0                      00720", "utf-8"))
         with dataSock:
             # checking
-            ack_bool = False
-            seq_bool = False
+            ack_bool = True        
+            seq_bool = False        
 
             # this part should be in a loop
             #TESTING: for loop recieves 10 packets
-            for i in range(10):    
+            for i in range(10):   
+                # recieve the data packet
                 buf = dataSock.recv(30)
-                print(buf.decode("UTF-8"))
                 packetString = buf.decode("UTF-8")
-                print(f"client SAYS: {packetString}")
-                match: re.match = re.match(p_out_regex, packetString)
-                print(match[1])
+                print(f"CLIENT says: {packetString}")
+                match: re.match = re.match(p_regex, packetString)
+                
+                # extract the sequence bool
+                seq_bool = True if match[1] == '1' else False
 
-                if not checksum_verifier(packetString) or match[2] == (0 if seq_bool else 1):
-                    if ack_bool:
-                        dataSock.sendall(bytes("  1                      00721", "utf-8"))
-                    else:
-                        dataSock.sendall(bytes("  0                      00720", "utf-8"))
+                # if the sequence number is the inverse of most recent ACK
+                # or corrupt (not implemented)...send a "negative" acknowledgement
+                while (seq_bool == ack_bool):
                     
+                    # build and send nAK
+                    tmp = 0 if seq_bool else 1
+                    chksum = checksum(f"  {tmp}                    ")
+                    dataSock.sendall(bytes(f"  {tmp}                    {chksum}", "utf-8"))
+
+                    # recieve the (hopefully) correct packet
                     buf = dataSock.recv(30)
                     print(buf.decode("UTF-8"))
                     packetString = buf.decode("UTF-8")
-                    print(f"RETRYING --- client SAYS: {packetString}")
-                    match: re.match = re.match(p_out_regex, packetString)
-
-                # invert bools and start over
-                ack_bool = not ack_bool
-                seq_bool = not seq_bool            
+                    print(f"RESENT --- client SAYS: {packetString}")
+                    match: re.match = re.match(p_regex, packetString)
+                    seq_bool = True if match[1] == '1' else False
+                else:
+                    #build and send the correct ack
+                    tmp = 1 if seq_bool else 0
+                    chksum = checksum(f"  {tmp}                    ")
+                    dataSock.sendall(bytes(f"  {tmp}                    {chksum}", "utf-8"))
+                
+                # invert ack (seq need not be handled here) and start over
+                ack_bool = not ack_bool         
                 
 
 
