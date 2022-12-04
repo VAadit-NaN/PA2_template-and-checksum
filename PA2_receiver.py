@@ -11,7 +11,7 @@ import re
 CONNECTION_TIMEOUT = 60 # timeout when the receiver cannot find the sender within 60 seconds
 FIRST_NAME = "AADITYA"
 LAST_NAME = "VIKRAM"
-PACKETPATTERN= r"([0-9]*)\s+([0-9]*)\s+(.{20})\s+([0-9]{5})"
+PACKETPATTERN= r"([0-9])\s([0-9])\s([\S\s]{20})\s([0-9]{5})"
 
 p_regex = re.compile(PACKETPATTERN)
 def start_receiver(server_ip, server_port, connection_ID, loss_rate=0.0, corrupt_rate=0.0, max_delay=0.0):
@@ -67,10 +67,12 @@ def start_receiver(server_ip, server_port, connection_ID, loss_rate=0.0, corrupt
 
             # this part should be in a loop
             #TESTING: for loop recieves 10 packets
-            for i in range(10):   
+            while True:   
                 # recieve the data packet
                 buf = dataSock.recv(30)
                 packetString = buf.decode("UTF-8")
+                if (packetString == ""):
+                    break
                 print(f"CLIENT says: {packetString}")
                 match: re.match = re.match(p_regex, packetString)
                 
@@ -83,8 +85,8 @@ def start_receiver(server_ip, server_port, connection_ID, loss_rate=0.0, corrupt
                     
                     # build and send nAK
                     tmp = 0 if seq_bool else 1
-                    chksum = checksum(f"  {tmp}                    ")
-                    dataSock.sendall(bytes(f"  {tmp}                    {chksum}", "utf-8"))
+                    chksum = checksum(f"  {tmp}                      ")
+                    dataSock.sendall(bytes(f"  {tmp}                      {chksum}", "utf-8"))
 
                     # recieve the (hopefully) correct packet
                     buf = dataSock.recv(30)
@@ -96,8 +98,8 @@ def start_receiver(server_ip, server_port, connection_ID, loss_rate=0.0, corrupt
                 else:
                     #build and send the correct ack
                     tmp = 1 if seq_bool else 0
-                    chksum = checksum(f"  {tmp}                    ")
-                    dataSock.sendall(bytes(f"  {tmp}                    {chksum}", "utf-8"))
+                    chksum = checksum(f"  {tmp}                      ")
+                    dataSock.sendall(bytes(f"  {tmp}                      {chksum}", "utf-8"))
                 
                 # invert ack (seq need not be handled here) and start over
                 ack_bool = not ack_bool         

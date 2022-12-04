@@ -9,9 +9,9 @@ from checksum import checksum, checksum_verifier
 import re
 
 CONNECTION_TIMEOUT = 60 # timeout when the sender cannot find the receiver within 60 seconds
-FIRST_NAME = "FIRSTNAME"
+FIRST_NAME = "FIRSTNAME"     
 LAST_NAME = "LASTNAME"
-PACKETPATTERN = r"([0-9]*)\s+([0-9]*)\s+(.{20})\s+([0-9]{5})"
+PACKETPATTERN = r"( )\s([0-9])\s( {20})\s([0-9]{5})"
 
 p_regex = re.compile(PACKETPATTERN)
 
@@ -97,6 +97,9 @@ def start_sender(server_ip, server_port, connection_ID, loss_rate=0, corrupt_rat
                 # TESTING: breaking a packet on purpose: WORKS
                 # seq_bool = not seq_bool if random.randint(0,10) > 7 else seq_bool
 
+                if (len(payload) < 20):
+                    payload += (' ' * (20 - len(payload)))
+
                 chk_in = f"{1 if seq_bool else 0} {1 if ack_bool else 0} {payload}"
                 chk_out = checksum(chk_in)
                 packet = f"{chk_in} {chk_out}"
@@ -116,8 +119,9 @@ def start_sender(server_ip, server_port, connection_ID, loss_rate=0, corrupt_rat
                 ack_bool = True if match[2] == '1' else False
 
                 # ack bool should be the same as the most recently sent sequence number
-                # so if ack is NOT the most recently sent or is corrupt              
-                if ack_bool:
+                # so if ack is NOT the most recently sent or is corrupt 
+                print(ack_bool)     
+                if ack_bool != seq_bool:
                     clientSock.sendall(bytes(packet, "UTF-8"))
                     buf = clientSock.recv(30)
                     packetString = buf.decode("UTF-8")
