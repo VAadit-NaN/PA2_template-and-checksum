@@ -121,12 +121,13 @@ def start_sender(server_ip, server_port, connection_ID, loss_rate=0, corrupt_rat
                 # ack bool should be the same as the most recently sent sequence number
                 # so if ack is NOT the most recently sent or is corrupt 
                 print(ack_bool)     
-                if ack_bool != seq_bool:
+                while ack_bool != seq_bool:
                     clientSock.sendall(bytes(packet, "UTF-8"))
                     buf = clientSock.recv(30)
                     packetString = buf.decode("UTF-8")
                     print(f"RESENT --- Server SAYS: {packetString}")
                     match: re.match = re.match(p_regex, packetString)
+                    ack_bool = True if match[2] == '1' else False
                 
                 # reset the timer and invert seq (ack need not be handled here)
                 seq_bool = not seq_bool

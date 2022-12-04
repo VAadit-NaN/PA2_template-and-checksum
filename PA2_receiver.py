@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # Last updated: Oct, 2021
 
+import random
 import sys
 import time
 import socket
@@ -59,50 +60,73 @@ def start_receiver(server_ip, server_port, connection_ID, loss_rate=0.0, corrupt
         # TEMPORARY: no need for a data_socket...again it's not a server
         clientSock.listen()
         dataSock, ret_addr = clientSock.accept()
-        # dataSock.sendall(bytes("  0                      00720", "utf-8"))
         with dataSock:
-            # checking
-            ack_bool = True        
-            seq_bool = False        
+            with open("declaration_server.txt", "w") as out:
+                # checking
+                ack_bool = False        
+                seq_bool = False  
+                state_change = False      
 
-            # this part should be in a loop
-            #TESTING: for loop recieves 10 packets
-            while True:   
-                # recieve the data packet
-                buf = dataSock.recv(30)
-                packetString = buf.decode("UTF-8")
-                if (packetString == ""):
-                    break
-                print(f"CLIENT says: {packetString}")
-                match: re.match = re.match(p_regex, packetString)
-                
-                # extract the sequence bool
-                seq_bool = True if match[1] == '1' else False
-
-                # if the sequence number is the inverse of most recent ACK
-                # or corrupt (not implemented)...send a "negative" acknowledgement
-                while (seq_bool == ack_bool):
-                    
-                    # build and send nAK
-                    tmp = 0 if seq_bool else 1
-                    chksum = checksum(f"  {tmp}                      ")
-                    dataSock.sendall(bytes(f"  {tmp}                      {chksum}", "utf-8"))
-
-                    # recieve the (hopefully) correct packet
+                # this part should be in a loop
+                #TESTING: for loop recieves 10 packets
+                while True:
+                    # recieve the data packet
                     buf = dataSock.recv(30)
-                    print(buf.decode("UTF-8"))
                     packetString = buf.decode("UTF-8")
-                    print(f"RESENT --- client SAYS: {packetString}")
-                    match: re.match = re.match(p_regex, packetString)
+                    if (packetString == ""):
+                        break
+                    print(f"CLIENT says: {packetString}")
+                    match: re.Match = re.match(p_regex, packetString)
+                    
+                    # extract the sequence bool
                     seq_bool = True if match[1] == '1' else False
-                else:
+
+                    #check if the packet is a repeat: i.e. a nAK
+                    state_change = (seq_bool == ack_bool)
+
+                    #! the problem is that the reciever changes state regardless.
+                    #! If, despite sending a pAk, it recieves the same packet, it needs to
+                    #! ask for a retransmit
+
+                    # invert ack if state transition (seq need not be handled here)
+                    if state_change:
+                        ack_bool = not ack_bool
+                        # this is a unique packet
+                        out.write(match[3])
+                        
+
+                    # if the sequence number is the inverse of most recent ACK
+                    # or corrupt (not implemented)...send a "negative" acknowledgement
+                    while (not state_change):
+                        
+                        # build and send nAK
+                        tmp = 0 if seq_bool else 1
+                        chksum = checksum(f"  {tmp}                      ")
+                        dataSock.sendall(bytes(f"  {tmp}                      {chksum}", "utf-8"))
+
+                        # recieve the (hopefully) correct packet
+                        buf = dataSock.recv(30)
+                        packetString = buf.decode("UTF-8")
+                        print(f"RESENT --- CLIENT says: {packetString}")
+                        match: re.Match = re.match(p_regex, packetString)
+                        seq_bool = True if match[1] == '1' else False
+                        state_change = (seq_bool == ack_bool)
+                
                     #build and send the correct ack
                     tmp = 1 if seq_bool else 0
+
+                    #tmp = 1 if random.randint(0, 10) > 8 else 0
+
                     chksum = checksum(f"  {tmp}                      ")
                     dataSock.sendall(bytes(f"  {tmp}                      {chksum}", "utf-8"))
-                
-                # invert ack (seq need not be handled here) and start over
-                ack_bool = not ack_bool         
+
+                    # check if the recived packet is a repeat: the pAK was not recieved correctly
+                    
+
+
+
+
+                 
                 
 
 
