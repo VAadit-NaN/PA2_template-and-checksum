@@ -41,57 +41,60 @@ def start_receiver(server_ip, server_port, connection_ID, loss_rate=0.0, corrupt
     ##### START YOUR IMPLEMENTATION HERE #####
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as clientSock:
 
-        # clientSock.connect((server_ip, server_port))
+        clientSock.connect((server_ip, server_port))
 
         # TEMPORARY: this is a "server" for localhost purposes
-        clientSock.bind((server_ip, server_port))
+        # clientSock.conn((server_ip, server_port))
     
         # HELLO R <loss_rate> <corrupt_rate> <max_delay> <ID>
         # read page 5-6 for debugging (connection_ID in use etc.)
         hello_msg = "HELLO R {} {} {} {}".format(loss_rate, corrupt_rate, max_delay, connection_ID)
         print(hello_msg)
 
-        
-        # TEMPORARY: no identification needed: this is the server...we're skipping the manual handshake
+        # NOTE: <loss_rate> <corrupt_rate> are float values in the range [0.0, 1.0]
+        clientSock.sendall(bytes(hello_msg, "UTF-8"))
 
-        # # NOTE: <loss_rate> <corrupt_rate> are float values in the range [0.0, 1.0]
-          # clientSock.sendall(bytes(hello_msg, "UTF-8"))
+        # 32 is arbitrary. May need to be bigger
+        data = clientSock.recv(64)
+        print(data.decode("UTF-8").strip())
+        datastring = data.decode("UTF-8").strip().split()
 
-        # TEMPORARY: no need for a data_socket...again it's not a server
-        clientSock.listen()
-        dataSock, ret_addr = clientSock.accept()
-        with dataSock:
-            with open("declaration_server.txt", "w") as out:
-                # checking
-                ack_bool = False        
-                seq_bool = False
+        if (datastring[0] != "OK"):
+            #error case
+            exit()
+            pass
+    
+        with open("declaration_server.txt", "w") as out:
+            # checking
+            ack_bool = False        
+            seq_bool = False
 
-                while True:
-                    # recieve the data packet
+            while True:
+                # recieve the data packet
+                buf = clientSock.recv(30)
+                packetString = buf.decode("UTF-8")
+                if (packetString == ""):
+                    break
 
-                    # loss would be ju
-
-
-                    buf = dataSock.recv(30)
-                    packetString = buf.decode("UTF-8")
-                    if (packetString == ""):
-                        break
-
-                    print(f"CLIENT says: {packetString}")
-                    match: re.Match = re.match(p_regex, packetString)
+                print(f"CLIENT says: {packetString}")
+                match: re.Match = re.match(p_regex, packetString)
+                # regex fail means corrupt
+                regex_fail = (match == None)
+                if not regex_fail:
                     seq_bool = True if match[1] == '1' else False
-                    
-                    # pAK
-                    if seq_bool == ack_bool and checksum_verifier(packetString):
-                        out.write(match[3])
-                        ack_bool = not ack_bool
-                    
-                    
-                    tmp = 1 if seq_bool else 0
-                    chksum = checksum(f"  {tmp}                      ")
-                    # checking if corruption is handled properly
-                    chksum = '10001' if random.randint(0, 10) > 7 else chksum
-                    dataSock.sendall(bytes(f"  {tmp}                      {chksum}", "utf-8"))
+
+                # pAK
+                if seq_bool == ack_bool and checksum_verifier(packetString) and not regex_fail:
+                    out.write(match[3])
+                    ack_bool = not ack_bool
+                else:
+                    print("FAIL: retransmitting...")
+
+                
+                
+                tmp = 0 if ack_bool else 1
+                chksum = checksum(f"  {tmp}                      ")
+                clientSock.sendall(bytes(f"  {tmp}                      {chksum}", "utf-8"))
 
     ##### END YOUR IMPLEMENTATION HERE #####
 
@@ -106,15 +109,15 @@ def start_receiver(server_ip, server_port, connection_ID, loss_rate=0.0, corrupt
  
 if __name__ == '__main__':
     # CHECK INPUT ARGUMENTS
-    # if len(sys.argv) != 7:
-    #     print("Expected \"python PA2_receiver.py <server_ip> <server_port> <connection_id> <loss_rate> <corrupt_rate> <max_delay>\"")
-    #     exit()
+    if len(sys.argv) != 7:
+        print("Expected \"python PA2_receiver.py <server_ip> <server_port> <connection_id> <loss_rate> <corrupt_rate> <max_delay>\"")
+        exit()
 
-    # server_ip, server_port, connection_ID, loss_rate, corrupt_rate, max_delay = sys.argv[1:]
+    server_ip, server_port, connection_ID, loss_rate, corrupt_rate, max_delay = sys.argv[1:]
 
     # TEMPORARY RESOLUTION FOR LOCALHOST
-    server_ip, server_port, connection_ID, loss_rate, corrupt_rate, max_delay \
-    =  "127.0.0.1", 1025, 6464, 0.0, 0.0, "declaration.txt"
+    # server_ip, server_port, connection_ID, loss_rate, corrupt_rate, max_delay \
+    # =  "127.0.0.1", 1025, 6464, 0.0, 0.0, "declaration.txt"
     
     
     # START RECEIVER
