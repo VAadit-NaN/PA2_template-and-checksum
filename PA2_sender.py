@@ -90,12 +90,17 @@ def start_sender(server_ip, server_port, connection_ID, loss_rate=0, corrupt_rat
         seq_bool = False        # expects this to be the same
         ack_bool = False        # expected to return the inverse of this
         state_transition = True
+        two_hundo_only = False
         clientSock.settimeout(transmission_timeout)
+        succ_trans = 0
+        checksum_string = ""
 
         # from: https://stackoverflow.com/a/61394102
         with open('declaration.txt') as fh:
             while (payload := fh.read(chunk_size)):
                 state_transition = True
+                if two_hundo_only:
+                    break
                 while state_transition:
                     # build the data packet
                     if (len(payload) < 20):
@@ -132,39 +137,10 @@ def start_sender(server_ip, server_port, connection_ID, loss_rate=0, corrupt_rat
                             clientSock.settimeout(transmission_timeout)
                             break
 
-<<<<<<< HEAD
-                # send packet and start the timer
-                clientSock.sendall(bytes(packet, "UTF-8"))
-
-                # recieve packet from the server
-                buf = clientSock.recv(30)
-                packetString = buf.decode("UTF-8")
-                print(f"SERVER says: {packetString}")
-                match: re.match = re.match(p_regex, packetString)
-
-                # ack 0 is 00720 and ack 1 is 00721
-                # NOTE: implement timeouts after. rdt 2.2 for now
-
-                ack_bool = True if match[2] == '1' else False
-
-                # ack bool should be the same as the most recently sent sequence number
-                # so if ack is NOT the most recently sent or is corrupt 
-                print(ack_bool)     
-                while ack_bool != seq_bool:
-                    clientSock.sendall(bytes(packet, "UTF-8"))
-                    buf = clientSock.recv(30)
-=======
->>>>>>> one_pair_per_loop
                     packetString = buf.decode("UTF-8")
                     print(f"SERVER says: {packetString}")
 
                     match: re.match = re.match(p_regex, packetString)
-<<<<<<< HEAD
-                    ack_bool = True if match[2] == '1' else False
-                
-                # reset the timer and invert seq (ack need not be handled here)
-                seq_bool = not seq_bool
-=======
                     regex_fail = (match == None)
                     if not regex_fail:
                         ack_bool = True if match[2] == '1' else False
@@ -178,12 +154,17 @@ def start_sender(server_ip, server_port, connection_ID, loss_rate=0, corrupt_rat
                     else:
                         seq_bool = not seq_bool
                         state_transition = False
+                        # extract the match from successful transmissions (count to 10)
+                        if succ_trans < 10:
+                            checksum_string += payload
+                            succ_trans += 1
+                        else:
+                            two_hundo_only = True
+                            clientSock.sendall(bytes("", "UTF-8"))
+                            break
+                
 
-                    
->>>>>>> one_pair_per_loop
-
-
-
+    checksum_val = checksum(checksum_string)
     ##### END YOUR IMPLEMENTATION HERE #####
 
     print("Finish running sender: {}".format(datetime.datetime.now()))

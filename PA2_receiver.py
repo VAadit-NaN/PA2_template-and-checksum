@@ -68,11 +68,14 @@ def start_receiver(server_ip, server_port, connection_ID, loss_rate=0.0, corrupt
             # checking
             ack_bool = False        
             seq_bool = False
+            succ_trans = 0
+            checksum_string = ""
 
             while True:
                 # recieve the data packet
                 buf = clientSock.recv(30)
                 packetString = buf.decode("UTF-8")
+
                 if (packetString == ""):
                     break
 
@@ -87,6 +90,9 @@ def start_receiver(server_ip, server_port, connection_ID, loss_rate=0.0, corrupt
                 if seq_bool == ack_bool and checksum_verifier(packetString) and not regex_fail:
                     out.write(match[3])
                     ack_bool = not ack_bool
+                    if succ_trans < 10:
+                        checksum_string += match[3]
+                        succ_trans += 1
                 else:
                     print("FAIL: retransmitting...")
 
@@ -95,7 +101,8 @@ def start_receiver(server_ip, server_port, connection_ID, loss_rate=0.0, corrupt
                 tmp = 0 if ack_bool else 1
                 chksum = checksum(f"  {tmp}                      ")
                 clientSock.sendall(bytes(f"  {tmp}                      {chksum}", "utf-8"))
-
+    
+    checksum_val = checksum(checksum_string)
     ##### END YOUR IMPLEMENTATION HERE #####
 
     print("Finish running receiver: {}".format(datetime.datetime.now()))
