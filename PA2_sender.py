@@ -63,20 +63,22 @@ def start_sender(server_ip, server_port, connection_ID, loss_rate=0, corrupt_rat
         hello_msg = f"HELLO S {loss_rate} {corrupt_rate} {max_delay} {connection_ID}"
         print(hello_msg)
 
+
         # TEMPORARY: no need for manual handshake...this is localhost
             # NOTE: <loss_rate> <corrupt_rate> are float values in the range [0.0, 1.0]
-            # clientSock.sendall(bytes(hello_msg, "UTF-8"))
+        clientSock.sendall(bytes(hello_msg, "UTF-8"))
 
-            # # 32 is arbitrary. May need to be bigger
-            # data = clientSock.recv(32)
-            # print(data.decode("UTF-8").strip())
-            # datastring = data.decode("UTF-8").strip().split()
-            # if (datastring[0] != "WAITING"):
-            #     #error case
-            #     pass    
-            # # OK message: i want to see it
-            # data2 = clientSock.recv(64)
-            # print(data2.decode("UTF-8").strip())
+        # 32 is arbitrary. May need to be bigger
+        data = clientSock.recv(32)
+        print(data.decode("UTF-8").strip())
+        datastring = data.decode("UTF-8").strip().split()
+        if (datastring[0] != "WAITING"):
+            #error case
+            exit()
+            pass    
+        # OK message: i want to see it
+        data2 = clientSock.recv(64)
+        print(data2.decode("UTF-8").strip())
         
         # works up till here
 
@@ -87,23 +89,50 @@ def start_sender(server_ip, server_port, connection_ID, loss_rate=0, corrupt_rat
         chunk_size = 20
         seq_bool = False        # expects this to be the same
         ack_bool = False        # expected to return the inverse of this
-        
+        state_transition = True
+        clientSock.settimeout(transmission_timeout)
+
         # from: https://stackoverflow.com/a/61394102
         with open('declaration.txt') as fh:
             while (payload := fh.read(chunk_size)):
+                state_transition = True
+                while state_transition:
+                    # build the data packet
+                    if (len(payload) < 20):
+                        payload += (' ' * (20 - len(payload)))
 
-                # build the data packet
-                
-                # TESTING: breaking a packet on purpose: WORKS
-                # seq_bool = not seq_bool if random.randint(0,10) > 7 else seq_bool
+                    chk_in = f"{1 if seq_bool else 0} {1 if ack_bool else 0} {payload} "
+                    chk_out = checksum(chk_in)
+                    packet = f"{chk_in}{chk_out}"
+                    
 
-                if (len(payload) < 20):
-                    payload += (' ' * (20 - len(payload)))
+                    #send packet and start the timer
+                    while True:
+                        try:
+                            clientSock.sendall(bytes(packet, "UTF-8"))
+                            total_packet_sent += 1
+                        except socket.timeout:
+                            print("timed out")
+                            total_timeout += 1
+                        else:
+                            clientSock.settimeout(transmission_timeout)
+                            break
 
-                chk_in = f"{1 if seq_bool else 0} {1 if ack_bool else 0} {payload}"
-                chk_out = checksum(chk_in)
-                packet = f"{chk_in} {chk_out}"
+                    #recieve packet from the server
+                    while True:
+                        try:
+                            buf = clientSock.recv(30)
+                            total_packet_recv += 1
+                        except socket.timeout:
+                            print("timed out")
+                            total_timeout += 1
+                            clientSock.sendall(bytes(packet, "UTF-8"))
+                            total_packet_sent += 1
+                        else:
+                            clientSock.settimeout(transmission_timeout)
+                            break
 
+<<<<<<< HEAD
                 # send packet and start the timer
                 clientSock.sendall(bytes(packet, "UTF-8"))
 
@@ -124,13 +153,34 @@ def start_sender(server_ip, server_port, connection_ID, loss_rate=0, corrupt_rat
                 while ack_bool != seq_bool:
                     clientSock.sendall(bytes(packet, "UTF-8"))
                     buf = clientSock.recv(30)
+=======
+>>>>>>> one_pair_per_loop
                     packetString = buf.decode("UTF-8")
-                    print(f"RESENT --- Server SAYS: {packetString}")
+                    print(f"SERVER says: {packetString}")
+
                     match: re.match = re.match(p_regex, packetString)
+<<<<<<< HEAD
                     ack_bool = True if match[2] == '1' else False
                 
                 # reset the timer and invert seq (ack need not be handled here)
                 seq_bool = not seq_bool
+=======
+                    regex_fail = (match == None)
+                    if not regex_fail:
+                        ack_bool = True if match[2] == '1' else False
+
+                    # nAK
+                    if ack_bool != seq_bool or not checksum_verifier(packetString) or regex_fail:
+                        print("FAIL: retransmitting...")
+                        total_corrupted_pkt_recv += 1
+                        state_transition = True
+                    # pAK                   
+                    else:
+                        seq_bool = not seq_bool
+                        state_transition = False
+
+                    
+>>>>>>> one_pair_per_loop
 
 
 
@@ -150,16 +200,16 @@ def start_sender(server_ip, server_port, connection_ID, loss_rate=0, corrupt_rat
  
 if __name__ == '__main__':
     # CHECK INPUT ARGUMENTS
-    # if len(sys.argv) != 9:
-    #     print("Expected \"python3 PA2_sender.py <server_ip> <server_port> <connection_id> <loss_rate> <corrupt_rate> <max_delay> <transmission_timeout> <filename>\"")
-    #     exit()
+    if len(sys.argv) != 9:
+        print("Expected \"python3 PA2_sender.py <server_ip> <server_port> <connection_id> <loss_rate> <corrupt_rate> <max_delay> <transmission_timeout> <filename>\"")
+        exit()
 
     # ASSIGN ARGUMENTS TO VARIABLES
-    # server_ip, server_port, connection_ID, loss_rate, corrupt_rate, max_delay, transmission_timeout, filename = sys.argv[1:]
+    server_ip, server_port, connection_ID, loss_rate, corrupt_rate, max_delay, transmission_timeout, filename = sys.argv[1:]
 
     # TEMPORARY RESOLUTION FOR LOCALHOST
-    server_ip, server_port, connection_ID, loss_rate, corrupt_rate, max_delay, transmission_timeout, filename \
-    =  "127.0.0.1", 1025, 6464, 0.0, 0.0, 0.0, 60, "declaration.txt"
+    # server_ip, server_port, connection_ID, loss_rate, corrupt_rate, max_delay, transmission_timeout, filename \
+    # =  "128.119.245.12", 20500, 9999, 0.0, 0.0, 0.0, 3, "./declaration.txt"
     
     # RUN SENDER
-    start_sender(server_ip, int(server_port), connection_ID, loss_rate, corrupt_rate, max_delay, float(transmission_timeout), filename)
+    start_sender(server_ip, int(server_port), int(connection_ID), float(loss_rate), float(corrupt_rate), float(max_delay), float(transmission_timeout), filename)

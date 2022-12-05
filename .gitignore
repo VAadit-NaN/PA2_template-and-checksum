@@ -5,6 +5,12 @@ __pycache__/
 
 
 declaration.txt
+<<<<<<< HEAD
 output.txt
 output2.txt
 declaration_server.txt
+=======
+output2.txt
+declaration_server.txt
+output.txt
+>>>>>>> one_pair_per_loop
