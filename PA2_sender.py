@@ -87,49 +87,61 @@ def start_sender(server_ip, server_port, connection_ID, loss_rate=0, corrupt_rat
         chunk_size = 20
         seq_bool = False        # expects this to be the same
         ack_bool = False        # expected to return the inverse of this
+        state_transition = True
+        clientSock.settimeout(transmission_timeout)
+        timer = True
         
         # from: https://stackoverflow.com/a/61394102
         with open('declaration.txt') as fh:
             while (payload := fh.read(chunk_size)):
+                state_transition = True
+                while state_transition:
+                    # build the data packet
+                    if (len(payload) < 20):
+                        payload += (' ' * (20 - len(payload)))
 
-                # build the data packet
-                
-                # TESTING: breaking a packet on purpose: WORKS
-                # seq_bool = not seq_bool if random.randint(0,10) > 7 else seq_bool
+                    chk_in = f"{1 if seq_bool else 0} {1 if ack_bool else 0} {payload} "
+                    chk_out = checksum(chk_in)
+                    packet = f"{chk_in}{chk_out}"
+                    
 
-                if (len(payload) < 20):
-                    payload += (' ' * (20 - len(payload)))
+                    # send packet and start the timer
+                    while (timer):
+                        try:
+                            clientSock.sendall(bytes(packet, "UTF-8"))
+                        except socket.timeout:
+                            print("timed out")
+                        else:
+                            timer = False
 
-                chk_in = f"{1 if seq_bool else 0} {1 if ack_bool else 0} {payload}"
-                chk_out = checksum(chk_in)
-                packet = f"{chk_in} {chk_out}"
+                    timer = True
 
-                # send packet and start the timer
-                clientSock.sendall(bytes(packet, "UTF-8"))
+                    # recieve packet from the server
+                    while (timer):
+                        try:
+                            buf = clientSock.recv(30)
+                        except socket.timeout:
+                            print("timed out")
+                        else:
+                            timer = False
 
-                # recieve packet from the server
-                buf = clientSock.recv(30)
-                packetString = buf.decode("UTF-8")
-                print(f"SERVER says: {packetString}")
-                match: re.match = re.match(p_regex, packetString)
-
-                # ack 0 is 00720 and ack 1 is 00721
-                # NOTE: implement timeouts after. rdt 2.2 for now
-
-                ack_bool = True if match[2] == '1' else False
-
-                # ack bool should be the same as the most recently sent sequence number
-                # so if ack is NOT the most recently sent or is corrupt 
-                print(ack_bool)     
-                if ack_bool != seq_bool:
-                    clientSock.sendall(bytes(packet, "UTF-8"))
-                    buf = clientSock.recv(30)
+                    timer = True
+                    
                     packetString = buf.decode("UTF-8")
-                    print(f"RESENT --- Server SAYS: {packetString}")
+                    print(f"SERVER says: {packetString}")
+
                     match: re.match = re.match(p_regex, packetString)
-                
-                # reset the timer and invert seq (ack need not be handled here)
-                seq_bool = not seq_bool
+                    ack_bool = True if match[2] == '1' else False
+
+                    # nAK
+                    if ack_bool != seq_bool or not checksum_verifier(packetString):
+                        state_transition = True
+                    # pAK                   
+                    else:
+                        seq_bool = not seq_bool
+                        state_transition = False
+
+                    
 
 
 
